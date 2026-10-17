@@ -1,6 +1,10 @@
 // Copyright © 2026 Apple Inc.
 
+#ifdef __APPLE__
 #include <sys/sysctl.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "mlx/backend/gpu/device_info.h"
 #include "mlx/backend/metal/device.h"
@@ -32,11 +36,14 @@ device_info(int device_index) {
     auto arch = device.get_architecture();
 
     size_t memsize = 0;
+    size_t rsrc_limit = 0;
+#ifdef __APPLE__
     size_t length = sizeof(memsize);
     sysctlbyname("hw.memsize", &memsize, &length, NULL, 0);
-
-    size_t rsrc_limit = 0;
     sysctlbyname("iogpu.rsrc_limit", &rsrc_limit, &length, NULL, 0);
+#else
+    memsize = size_t(sysconf(_SC_PHYS_PAGES)) * size_t(sysconf(_SC_PAGE_SIZE));
+#endif
     if (rsrc_limit == 0) {
       rsrc_limit = 499000;
     }
