@@ -42,6 +42,12 @@ option(MLX_BUILD_GGUF "Include support for GGUF format" ON)
 option(MLX_BUILD_SAFETENSORS "Include support for safetensors format" ON)
 option(MLX_BUILD_PYTHON_STUBS "Build stub files for python bindings" ON)
 option(MLX_METAL_JIT "Use JIT compilation for Metal kernels" OFF)
+set(MLX_METAL_LIMINA
+    ""
+    CACHE
+      PATH
+      "Build the Metal backend on Linux over limina's GPU transport, from this \
+limina-metal prefix: lib/, include/, metal-cpp/ and the host-built mlx/")
 option(MLX_USE_CCACHE "Use CCache for compilation cache when available" ON)
 option(MLX_EXPORT_ALL_SYMBOLS "Export all symbols in the library" OFF)
 option(BUILD_SHARED_LIBS "Build mlx as a shared library" OFF)
@@ -73,7 +79,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   # Enable the Metal backend by default on iOS; the caller selects the SDK.
-else()
+elseif(NOT MLX_METAL_LIMINA)
   set(MLX_BUILD_METAL OFF)
 endif()
 
@@ -166,10 +172,46 @@ if(MLX_BUILD_CUDA)
   endif()
 endif()
 
+if(MLX_BUILD_METAL AND MLX_METAL_LIMINA)
+  # limina: Metal is limina-metal, which supplies the Objective-C runtime entry
+  # points Apple's metal-cpp calls. The kernels (mlx.metallib) and the JIT
+  # sources need Apple's Metal toolchain, so they come prebuilt from the host,
+  # from the same MLX source and configuration.
+  include(${MLX_METAL_LIMINA}/mlx/config.cmake)
+  if(NOT MLX_METAL_JIT STREQUAL MLX_LIMINA_HOST_JIT)
+    message(
+      FATAL_ERROR
+        "The host built ${MLX_METAL_LIMINA}/mlx with MLX_METAL_JIT=${MLX_LIMINA_HOST_JIT}; "
+        "this build has MLX_METAL_JIT=${MLX_METAL_JIT}.")
+  endif()
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/LIMINA_SOURCE_COMMIT)
+    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/LIMINA_SOURCE_COMMIT
+         MLX_LIMINA_SOURCE_COMMIT)
+    if(NOT MLX_LIMINA_SOURCE_COMMIT STREQUAL MLX_LIMINA_HOST_COMMIT)
+      message(
+        FATAL_ERROR
+          "The host built ${MLX_METAL_LIMINA}/mlx from MLX ${MLX_LIMINA_HOST_COMMIT}; "
+          "this source is ${MLX_LIMINA_SOURCE_COMMIT}.")
+    endif()
+  endif()
+  set(METAL_LIB ${MLX_METAL_LIMINA}/lib/liblimina_metal.so)
+  set(MLX_METAL_PATH ${MLX_METAL_LIMINA}/mlx)
+  set(FETCHCONTENT_SOURCE_DIR_METAL_CPP ${MLX_METAL_LIMINA}/metal-cpp)
+  # Stand-ins for the Darwin headers metal-cpp includes; metal-cpp turns
+  # completion handlers into blocks.
+  target_include_directories(
+    mlx PUBLIC $<BUILD_INTERFACE:${MLX_METAL_LIMINA}/include>
+               $<INSTALL_INTERFACE:include/limina_metal>)
+  target_compile_options(mlx PUBLIC -fblocks)
+  message(STATUS "Metal over limina: ${METAL_LIB}, kernels from ${MLX_METAL_PATH}")
+endif()
+
 if(MLX_BUILD_METAL)
-  find_library(METAL_LIB Metal)
-  find_library(FOUNDATION_LIB Foundation)
-  find_library(QUARTZ_LIB QuartzCore)
+  if(NOT MLX_METAL_LIMINA)
+    find_library(METAL_LIB Metal)
+    find_library(FOUNDATION_LIB Foundation)
+    find_library(QUARTZ_LIB QuartzCore)
+  endif()
   if(METAL_LIB)
     message(STATUS "Metal found ${METAL_LIB}")
   else()

@@ -9,6 +9,13 @@ function(make_jit_source SRC_FILE)
   # Additional arguments to this function are treated as dependencies in the
   # Cmake build system.
   get_filename_component(SRC_NAME ${SRC_FILE} NAME)
+  if(MLX_METAL_LIMINA)
+    # limina: generated on the host, which has the Metal compiler this needs.
+    configure_file(${MLX_METAL_LIMINA}/mlx/jit/${SRC_NAME}.cpp
+                   ${CMAKE_CURRENT_BINARY_DIR}/jit/${SRC_NAME}.cpp COPYONLY)
+    target_sources(mlx PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/jit/${SRC_NAME}.cpp)
+    return()
+  endif()
   add_custom_command(
     OUTPUT jit/${SRC_NAME}.cpp
     COMMAND
@@ -161,7 +168,10 @@ if(NOT MLX_METAL_PATH)
   set(MLX_METAL_PATH ${CMAKE_CURRENT_BINARY_DIR}/kernels/)
 endif()
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/kernels)
+# limina: mlx.metallib comes prebuilt from the host, in MLX_METAL_PATH.
+if(NOT MLX_METAL_LIMINA)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/kernels)
+endif()
 
 target_compile_definitions(mlx
                            PRIVATE METAL_PATH="${MLX_METAL_PATH}/mlx.metallib")

@@ -5,7 +5,13 @@
 #include "mlx/backend/metal/resident.h"
 #include "mlx/memory.h"
 
+#ifdef __APPLE__
 #include <mach/vm_page_size.h>
+#else
+// Metal buffers are the host's memory: they come in the host's page, 16 KiB on
+// Apple silicon, whatever page the guest kernel uses.
+static constexpr size_t vm_page_size = 16384;
+#endif
 #include <unistd.h>
 #include <cassert>
 #include <cstdlib>
