@@ -366,7 +366,7 @@ std::pair<array, array> compute_bluestein_constants(
       /* data_in= */ w_q_vec.data(),
       /* data_out= */ w_q_ptr,
       /* scale= */ 1.0f);
-  return std::make_tuple(w_k, w_q);
+  return {w_k, w_q};
 }
 
 void multi_upload_bluestein_fft(
